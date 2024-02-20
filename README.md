@@ -12,7 +12,7 @@ The actual html code needs to be passed to the body of the HTTP request that is 
 
 Example usage:
 ```
-curl --location 'https://vinayakasmallbay.pythonanywhere.com/convert_to_pdf?page_size=A4' \
+curl --location '127.0.0.1/convert_to_pdf?page_size=A4' \
 --header 'Content-Type: application/json' \
 --data '<html>
 <body>Your
