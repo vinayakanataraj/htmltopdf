@@ -1,16 +1,19 @@
 from flask import Flask, request, jsonify
-import base64
-import pdfkit
 from io import BytesIO
 from PyPDF2 import PdfFileReader, PdfFileWriter
+import base64
+import pdfkit
+import os
 
 app = Flask(__name__)
 
-# Define the authentication key
-auth_key = "gOgZ0g5Cwdq2l0EtSizd"
+# Retrieve the authentication key from an environment variable
+auth_key = os.environ.get("AUTH_KEY")
+auth_secret = os.environ.get("AUTH_SECRET")
 
-def process_html_content(html_content, page_size='Letter', margin_top='0mm', margin_right='0mm', margin_bottom='0mm', margin_left='0mm', page_height, page_width):
-    """Converts an HTML content to base64 format with pagination.
+
+def process_html_content(html_content, page_height, page_width, page_size='Letter', margin_top='0mm', margin_right='0mm', margin_bottom='0mm', margin_left='0mm'):
+    """Converts an HTML content to base64 format.
 
     Args:
         html_content (str): The HTML content as a string.
@@ -24,6 +27,8 @@ def process_html_content(html_content, page_size='Letter', margin_top='0mm', mar
         str: The base64-encoded representation of the PDF file generated from the HTML.
     """
     pdf_file_path = "output.pdf"
+
+    # Convert HTML to PDF
     options = {
         'page-size': page_size,
         'margin-top': margin_top,
@@ -31,10 +36,8 @@ def process_html_content(html_content, page_size='Letter', margin_top='0mm', mar
         'margin-bottom': margin_bottom,
         'margin-left': margin_left,
         'page-height': page_height,
-        'page-width': page_width
+        'page-width': page_width,
     }
-
-    # Convert HTML to PDF
     pdfkit.from_string(html_content, pdf_file_path, options=options)
 
     # Split PDF into pages and convert each page to base64
@@ -51,30 +54,29 @@ def process_html_content(html_content, page_size='Letter', margin_top='0mm', mar
 
     return encoded_pages
 
-
 @app.route('/convert_to_pdf', methods=['POST'])
 def convert_to_pdf():
     try:
         # Check if the provided authentication key matches the predefined key
-        provided_key = request.args.get('auth_key')
-        if provided_key != auth_key:
+        provided_key = request.headers.get('auth_key')
+        provided_secret = request.headers.get('auth_secret')
+        if (provided_key != auth_key) or (provided_secret != auth_secret):
             # If authentication fails, return a 404 error
-            return jsonify({"error": "Authentication failed"}), 404
+            return jsonify({"error": "Authentication failed"}), 401
 
         html_content = request.data.decode("utf-8")
         if not html_content:
             raise ValueError("Missing HTML content in request body")
-
+        page_height = request.args.get('page_height')
+        page_width = request.args.get('page_width')
         page_size = request.args.get('page_size', 'Letter')
         margin_top = request.args.get('margin_top', '0mm')
         margin_right = request.args.get('margin_right', '0mm')
         margin_bottom = request.args.get('margin_bottom', '0mm')
         margin_left = request.args.get('margin_left', '0mm')
-        page_height = request.args.get('page_height')
-        page_width = request.args.get('page_width')
+        
 
-
-        base64_result = process_html_content(html_content, page_size, margin_top, margin_right, margin_bottom, margin_left)
+        base64_result = process_html_content(html_content,page_height, page_width, page_size, margin_top, margin_right, margin_bottom, margin_left)
         return jsonify({"base64_result": base64_result})
     except Exception as e:
         return jsonify({"error": str(e)}), 400
@@ -82,3 +84,6 @@ def convert_to_pdf():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+
+# This web server is built on flask
