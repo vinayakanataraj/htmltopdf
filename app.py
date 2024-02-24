@@ -9,7 +9,7 @@ app = Flask(__name__)
 # Define the authentication key
 auth_key = "gOgZ0g5Cwdq2l0EtSizd"
 
-def process_html_content(html_content, page_size='Letter', margin_top='0mm', margin_right='0mm', margin_bottom='0mm', margin_left='0mm'):
+def process_html_content(html_content, page_size='Letter', margin_top='0mm', margin_right='0mm', margin_bottom='0mm', margin_left='0mm', page_height, page_width):
     """Converts an HTML content to base64 format with pagination.
 
     Args:
@@ -30,6 +30,8 @@ def process_html_content(html_content, page_size='Letter', margin_top='0mm', mar
         'margin-right': margin_right,
         'margin-bottom': margin_bottom,
         'margin-left': margin_left,
+        'page-height': page_height,
+        'page-width': page_width
     }
 
     # Convert HTML to PDF
@@ -68,6 +70,9 @@ def convert_to_pdf():
         margin_right = request.args.get('margin_right', '0mm')
         margin_bottom = request.args.get('margin_bottom', '0mm')
         margin_left = request.args.get('margin_left', '0mm')
+        page_height = request.args.get('page_height')
+        page_width = request.args.get('page_width')
+
 
         base64_result = process_html_content(html_content, page_size, margin_top, margin_right, margin_bottom, margin_left)
         return jsonify({"base64_result": base64_result})
