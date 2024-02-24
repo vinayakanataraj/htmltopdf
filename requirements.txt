@@ -1,3 +1,4 @@
 pdfkit
 pybase64
 flask
+PyPDF2
