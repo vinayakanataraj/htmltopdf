@@ -12,12 +12,12 @@ auth_key = os.environ.get("AUTH_KEY")
 auth_secret = os.environ.get("AUTH_SECRET")
 
 
-def process_html_content(html_content, page_height, page_width, page_size='Letter', margin_top='0mm', margin_right='0mm', margin_bottom='0mm', margin_left='0mm'):
+def process_html_content(html_content, page_height, page_width, page_size, margin_top='0mm', margin_right='0mm', margin_bottom='0mm', margin_left='0mm'):
     """Converts an HTML content to base64 format.
 
     Args:
         html_content (str): The HTML content as a string.
-        page_size (str): The size of the PDF page (default: 'Letter').
+        page_size (str): The size of the PDF page.
         margin_top (str): Top margin of the PDF page (default: '0mm').
         margin_right (str): Right margin of the PDF page (default: '0mm').
         margin_bottom (str): Bottom margin of the PDF page (default: '0mm').
@@ -69,7 +69,7 @@ def convert_to_pdf():
             raise ValueError("Missing HTML content in request body")
         page_height = request.args.get('page_height')
         page_width = request.args.get('page_width')
-        page_size = request.args.get('page_size', 'Letter')
+        page_size = request.args.get('page_size')
         margin_top = request.args.get('margin_top', '0mm')
         margin_right = request.args.get('margin_right', '0mm')
         margin_bottom = request.args.get('margin_bottom', '0mm')
