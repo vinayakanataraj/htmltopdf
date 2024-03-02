@@ -1,89 +1,151 @@
 from flask import Flask, request, jsonify
-from io import BytesIO
-from PyPDF2 import PdfFileReader, PdfFileWriter
-import base64
 import pdfkit
+import base64
 import os
+import json
+from barcode import Code39, writer
+
 
 app = Flask(__name__)
 
-# Retrieve the authentication key from an environment variable
-auth_key = os.environ.get("AUTH_KEY")
-auth_secret = os.environ.get("AUTH_SECRET")
+# Retrieve the authentication key and secret from environment variables
+AUTHORIZED_KEY = os.environ.get("AUTH_KEY")
+AUTHORIZED_SECRET = os.environ.get("AUTH_SECRET")
 
+def is_authorized(request):
+    provided_key = request.headers.get('auth_key')
+    provided_secret = request.headers.get('auth_secret')
+    return provided_key == AUTHORIZED_KEY and provided_secret == AUTHORIZED_SECRET
 
-def process_html_content(html_content, page_height, page_width, page_size, margin_top='0mm', margin_right='0mm', margin_bottom='0mm', margin_left='0mm'):
-    """Converts an HTML content to base64 format.
+def html_to_pdf_base64(html_input, options=None):
+    options = options or {}
+    pdf_bytes = pdfkit.from_string(html_input, False, options=options)
+    pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+    return pdf_base64
 
-    Args:
-        html_content (str): The HTML content as a string.
-        page_size (str): The size of the PDF page.
-        margin_top (str): Top margin of the PDF page (default: '0mm').
-        margin_right (str): Right margin of the PDF page (default: '0mm').
-        margin_bottom (str): Bottom margin of the PDF page (default: '0mm').
-        margin_left (str): Left margin of the PDF page (default: '0mm').
+def generate_barcode_and_html(data):
+   """
+   Generates a unique barcode number, creates a Code 39 barcode image,
+   generates an HTML table with the barcode embedded, and returns the
+   barcode image filename and the HTML table content.
 
-    Returns:
-        str: The base64-encoded representation of the PDF file generated from the HTML.
-    """
-    pdf_file_path = "output.pdf"
+   Args:
+       data: A dictionary containing the JSON data.
 
-    # Convert HTML to PDF
-    options = {
-        'page-size': page_size,
-        'margin-top': margin_top,
-        'margin-right': margin_right,
-        'margin-bottom': margin_bottom,
-        'margin-left': margin_left,
-        'page-height': page_height,
-        'page-width': page_width,
-    }
-    pdfkit.from_string(html_content, pdf_file_path, options=options)
+   Returns:
+       A tuple containing the barcode image filename (string) and the HTML table content (string).
+   """
 
-    # Split PDF into pages and convert each page to base64
-    encoded_pages = []
-    with open(pdf_file_path, "rb") as pdf_file:
-        pdf_data = pdf_file.read()
-        pdf_reader = PdfFileReader(BytesIO(pdf_data))
-        for page_num in range(pdf_reader.numPages):
-            output = PdfFileWriter()
-            output.addPage(pdf_reader.getPage(page_num))
-            with BytesIO() as output_pdf_bytes:
-                output.write(output_pdf_bytes)
-                encoded_pages.append(base64.b64encode(output_pdf_bytes.getvalue()).decode("utf-8"))
+   # Optimize for speed by avoiding unnecessary sorting and hashing
+   barcode_key = json.dumps(data)  # Use data as-is for key
 
-    return encoded_pages
+   # Generate unique ID and create barcode
+   unique_id = data["unitID"]
+   barcode = Code39(unique_id, writer=writer.ImageWriter)
+   barcode_filename = f"barcode"
+   barcode.save(barcode_filename)
+
+   # Generate HTML table directly, avoiding separate function call
+   size = data["unitSize"]
+   od = data["unitOD"]
+   weight = "{:.3f}".format(data["unitWeight"])
+   brand = data["unitBrand"]
+   mrp = "{:.2f}".format(1200*(float(data["unitWeight"])))
+
+   table_html = f"""
+   <table border="1" style="border-collapse: collapse;">
+       <tr>
+           <td colspan="2"><img src="{barcode_filename}.svg" alt="Barcode"></td>
+       </tr>
+       <tr>
+           <th>Size (mm)</th>
+           <th>OD (mm)</th>
+       </tr>
+       <tr>
+           <td>{size}</td>
+           <td>{od}</td>
+       </tr>
+       <tr>
+           <th>Weight (kg)</th>
+           <th>Brand</th>
+       </tr>
+       <tr>
+           <td>{weight}</td>
+           <td>{brand}</td>
+       </tr>
+       <tr>
+           <td colspan="2"><b>MRP: ₹{mrp}</b></td>
+       </tr>
+   </table>
+   """
+
+   return barcode_filename, table_html
+
 
 @app.route('/convert_to_pdf', methods=['POST'])
 def convert_to_pdf():
     try:
         # Check if the provided authentication key matches the predefined key
-        provided_key = request.headers.get('auth_key')
-        provided_secret = request.headers.get('auth_secret')
-        if (provided_key != auth_key) or (provided_secret != auth_secret):
-            # If authentication fails, return a 404 error
+        if not is_authorized(request):
             return jsonify({"error": "Authentication failed"}), 401
 
-        html_content = request.data.decode("utf-8")
-        if not html_content:
-            raise ValueError("Missing HTML content in request body")
-        page_height = request.args.get('page_height')
-        page_width = request.args.get('page_width')
-        page_size = request.args.get('page_size')
-        margin_top = request.args.get('margin_top', '0mm')
-        margin_right = request.args.get('margin_right', '0mm')
-        margin_bottom = request.args.get('margin_bottom', '0mm')
-        margin_left = request.args.get('margin_left', '0mm')
-        
+        html_input = request.get_data(as_text=True)
 
-        base64_result = process_html_content(html_content,page_height, page_width, page_size, margin_top, margin_right, margin_bottom, margin_left)
-        return jsonify({"base64_result": base64_result})
+        pdf_options = {
+            'page-size': request.args.get('page_size', 'A4'),
+            'orientation': request.args.get('orientation', 'Portrait'),
+            'margin-top': request.args.get('margin_top', '0mm'),
+            'margin-right': request.args.get('margin_right', '0mm'),
+            'margin-bottom': request.args.get('margin_bottom', '0mm'),
+            'margin-left': request.args.get('margin_left', '0mm'),
+        }
+
+        pdf_bytes = pdfkit.from_string(html_input, False, options=pdf_options)
+
+        # Save the entire PDF to 'output.pdf'
+        with open('output.pdf', 'wb') as output_file:
+            output_file.write(pdf_bytes)
+
+        pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+
+        return jsonify({'base64': pdf_base64})
+
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({'error': str(e)}), 500
+    
+@app.route('/generate_barcode', methods=['POST'])
+def generate_barcode():
+    try:
+        if not is_authorized(request):
+            return jsonify({"error": "Authentication failed"}), 401
+        
+        data = request.get_data(as_text=True)
+        data = json.dumps(data)
+        barcode_filename, table_html = generate_barcode_and_html(data) 
+
+        html_input = table_html
+
+        pdf_options = {
+            'page-size': request.args.get('page_size', 'A4'),
+            'orientation': request.args.get('orientation', 'Portrait'),
+            'margin-top': request.args.get('margin_top', '0mm'),
+            'margin-right': request.args.get('margin_right', '0mm'),
+            'margin-bottom': request.args.get('margin_bottom', '0mm'),
+            'margin-left': request.args.get('margin_left', '0mm'),
+        }
+
+        pdf_bytes = pdfkit.from_string(html_input, False, options=pdf_options)
+
+        # Save the entire PDF to 'output.pdf'
+        with open('output.pdf', 'wb') as output_file:
+            output_file.write(pdf_bytes)
+
+        pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+
+        return jsonify({'base64': pdf_base64})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
     app.run(debug=True)
-
-
-# This web server is built on flask
