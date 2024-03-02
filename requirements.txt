@@ -2,3 +2,5 @@ pdfkit
 pybase64
 flask
 PyPDF2
+python-barcode
+json
