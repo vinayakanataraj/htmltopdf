@@ -37,7 +37,7 @@ def generate_barcode_and_html(data):
    """
 
    # Optimize for speed by avoiding unnecessary sorting and hashing
-   barcode_key = json.dumps(data)  # Use data as-is for key
+   barcode_key = json.loads(data)  # Use data as-is for key
 
    # Generate unique ID and create barcode
    unique_id = data["unitID"]
