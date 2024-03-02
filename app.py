@@ -5,7 +5,6 @@ import os
 import json
 from barcode import Code39, writer
 
-
 app = Flask(__name__)
 
 # Retrieve the authentication key and secret from environment variables
@@ -24,63 +23,54 @@ def html_to_pdf_base64(html_input, options=None):
     return pdf_base64
 
 def generate_barcode_and_html(data):
-   """
-   Generates a unique barcode number, creates a Code 39 barcode image,
-   generates an HTML table with the barcode embedded, and returns the
-   barcode image filename and the HTML table content.
+    """
+    Generates a unique barcode number, creates a Code 39 barcode image,
+    generates an HTML table with the barcode embedded, and returns the
+    barcode image filename and the HTML table content.
+    """
+    # Use data as-is for key
+    barcode_key = json.loads(data)
 
-   Args:
-       data: A dictionary containing the JSON data.
+    # Generate unique ID and create barcode
+    unique_id = barcode_key["unitID"]
+    barcode = Code39(unique_id, writer=writer.ImageWriter)
+    barcode_filename = f"barcode_{unique_id}"
+    barcode.save(barcode_filename)
 
-   Returns:
-       A tuple containing the barcode image filename (string) and the HTML table content (string).
-   """
+    # Generate HTML table directly, avoiding separate function call
+    size = barcode_key["unitSize"]
+    od = barcode_key["unitOD"]
+    weight = "{:.3f}".format(barcode_key["unitWeight"])
+    brand = barcode_key["unitBrand"]
+    mrp = "{:.2f}".format(1200*(float(barcode_key["unitWeight"])))
 
-   # Optimize for speed by avoiding unnecessary sorting and hashing
-   barcode_key = json.loads(data)  # Use data as-is for key
-
-   # Generate unique ID and create barcode
-   unique_id = data["unitID"]
-   barcode = Code39(unique_id, writer=writer.ImageWriter)
-   barcode_filename = f"barcode"
-   barcode.save(barcode_filename)
-
-   # Generate HTML table directly, avoiding separate function call
-   size = data["unitSize"]
-   od = data["unitOD"]
-   weight = "{:.3f}".format(data["unitWeight"])
-   brand = data["unitBrand"]
-   mrp = "{:.2f}".format(1200*(float(data["unitWeight"])))
-
-   table_html = f"""
-   <table border="1" style="border-collapse: collapse;">
-       <tr>
-           <td colspan="2"><img src="{barcode_filename}.svg" alt="Barcode"></td>
-       </tr>
-       <tr>
-           <th>Size (mm)</th>
-           <th>OD (mm)</th>
-       </tr>
-       <tr>
-           <td>{size}</td>
-           <td>{od}</td>
-       </tr>
-       <tr>
-           <th>Weight (kg)</th>
-           <th>Brand</th>
-       </tr>
-       <tr>
-           <td>{weight}</td>
-           <td>{brand}</td>
-       </tr>
-       <tr>
-           <td colspan="2"><b>MRP: ₹{mrp}</b></td>
-       </tr>
-   </table>
-   """
-
-   return barcode_filename, table_html
-
+    table_html = f"""
+    <table border="1" style="border-collapse: collapse;">
+        <tr>
+            <td colspan="2"><img src="{barcode_filename}.svg" alt="Barcode"></td>
+        </tr>
+        <tr>
+            <th>Size (mm)</th>
+            <th>OD (mm)</th>
+        </tr>
+        <tr>
+            <td>{size}</td>
+            <td>{od}</td>
+        </tr>
+        <tr>
+            <th>Weight (kg)</th>
+            <th>Brand</th>
+        </tr>
+        <tr>
+            <td>{weight}</td>
+            <td>{brand}</td>
+        </tr>
+        <tr>
+            <td colspan="2"><b>MRP: ₹{mrp}</b></td>
+        </tr>
+    </table>
+    """
+    return barcode_filename, table_html
 
 @app.route('/convert_to_pdf', methods=['POST'])
 def convert_to_pdf():
@@ -102,10 +92,6 @@ def convert_to_pdf():
 
         pdf_bytes = pdfkit.from_string(html_input, False, options=pdf_options)
 
-        # Save the entire PDF to 'output.pdf'
-        with open('output.pdf', 'wb') as output_file:
-            output_file.write(pdf_bytes)
-
         pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
 
         return jsonify({'base64': pdf_base64})
@@ -120,7 +106,6 @@ def generate_barcode():
             return jsonify({"error": "Authentication failed"}), 401
         
         data = request.get_data(as_text=True)
-        data = json.dumps(data)
         barcode_filename, table_html = generate_barcode_and_html(data) 
 
         html_input = table_html
@@ -136,16 +121,11 @@ def generate_barcode():
 
         pdf_bytes = pdfkit.from_string(html_input, False, options=pdf_options)
 
-        # Save the entire PDF to 'output.pdf'
-        with open('output.pdf', 'wb') as output_file:
-            output_file.write(pdf_bytes)
-
         pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
 
         return jsonify({'base64': pdf_base64})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 
 if __name__ == '__main__':
     app.run(debug=True)
